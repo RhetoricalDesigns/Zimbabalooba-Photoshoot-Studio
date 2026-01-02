@@ -1,14 +1,25 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ImageUploader from './components/ImageUploader';
 import FittingControls from './components/FittingControls';
 import { generateModelFit, editGeneratedImage } from './services/geminiService';
 import { FittingConfig, GenerationState } from './types';
 
+declare global {
+  interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
+  }
+  interface Window {
+    aistudio?: AIStudio;
+  }
+}
+
 const App: React.FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [editPrompt, setEditPrompt] = useState('');
+  const [hasPersonalKey, setHasPersonalKey] = useState(false);
   const [fittingConfig, setFittingConfig] = useState<FittingConfig>({
     modelType: 'female',
     modelRace: 'Diverse',
@@ -24,16 +35,58 @@ const App: React.FC = () => {
     resultUrl: null,
   });
 
+  // Check for existing key on mount
+  useEffect(() => {
+    const checkKey = async () => {
+      try {
+        if (window.aistudio && typeof window.aistudio.hasSelectedApiKey === 'function') {
+          const hasKey = await window.aistudio.hasSelectedApiKey();
+          setHasPersonalKey(hasKey);
+        }
+      } catch (e) {
+        console.warn("AI Studio key bridge not detected.");
+      }
+    };
+    checkKey();
+  }, []);
+
+  const handleConnectKey = async () => {
+    try {
+      if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
+        await window.aistudio.openSelectKey();
+        // Proceed assuming success as per race condition guidelines
+        setHasPersonalKey(true);
+        setState(prev => ({ ...prev, error: null }));
+      } else {
+        setState(prev => ({ ...prev, error: "Key selection is only available within the AI Studio environment." }));
+      }
+    } catch (err: any) {
+      console.error("Key connection error:", err);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!selectedImage) return;
     setState({ isGenerating: true, isEditing: false, error: null, resultUrl: null });
     setIsImageLoading(false);
+    
     try {
-      const result = await generateModelFit(selectedImage, fittingConfig);
+      const result = await generateModelFit(selectedImage, fittingConfig, hasPersonalKey);
       setState({ isGenerating: false, isEditing: false, error: null, resultUrl: result });
       setIsImageLoading(true);
     } catch (err: any) {
-      setState({ isGenerating: false, isEditing: false, error: err.message, resultUrl: null });
+      console.error("Generate Error:", err);
+      if (err.message?.includes("Requested entity was not found.")) {
+        setHasPersonalKey(false);
+        setState({ 
+          isGenerating: false, 
+          isEditing: false, 
+          error: "Your API key session has expired. Please reconnect your Studio Key.", 
+          resultUrl: null 
+        });
+      } else {
+        setState({ isGenerating: false, isEditing: false, error: err.message, resultUrl: null });
+      }
     }
   };
 
@@ -42,11 +95,14 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, isEditing: true, error: null }));
     setIsImageLoading(false);
     try {
-      const result = await editGeneratedImage(state.resultUrl, editPrompt);
+      const result = await editGeneratedImage(state.resultUrl, editPrompt, hasPersonalKey);
       setState({ isGenerating: false, isEditing: false, error: null, resultUrl: result });
       setIsImageLoading(true);
       setEditPrompt('');
     } catch (err: any) {
+      if (err.message?.includes("Requested entity was not found.")) {
+        setHasPersonalKey(false);
+      }
       setState(prev => ({ ...prev, isEditing: false, error: err.message }));
     }
   };
@@ -63,19 +119,46 @@ const App: React.FC = () => {
               Photoshoot Studio
             </p>
           </div>
-          <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-gray-100 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-            <i className="fa-solid fa-camera-retro"></i>
-            Standard Studio
+          
+          <div className="flex items-center gap-3">
+             <div className={`px-4 py-2 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${hasPersonalKey ? 'bg-amber-50 border-zimbabalooba-orange text-zimbabalooba-orange' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                <i className={`fa-solid ${hasPersonalKey ? 'fa-sparkles' : 'fa-camera'}`}></i>
+                {hasPersonalKey ? 'Personal HD Active' : 'Standard Mode'}
+             </div>
           </div>
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-10">
         <div className="lg:col-span-4 space-y-6">
+          {/* Studio Key Setup */}
           <div className="bg-white p-6 rounded-3xl shadow-xl shadow-zimbabalooba-teal/5 border border-gray-50">
-            <h3 className="text-xs font-black text-zimbabalooba-teal uppercase tracking-widest mb-4 flex justify-between items-center">
-              1. Studio Input
+            <h3 className="text-xs font-black text-zimbabalooba-teal uppercase tracking-widest mb-3 flex items-center justify-between">
+              Studio Setup
+              {hasPersonalKey && <span className="bg-zimbabalooba-orange text-white text-[8px] px-2 py-0.5 rounded-full">CONNECTED</span>}
             </h3>
+            <p className="text-[10px] text-gray-500 font-medium leading-relaxed mb-4">
+              {hasPersonalKey 
+                ? "Using your personal Gemini 3 Pro engine for high-resolution 1K output." 
+                : "Connect your personal API key to unlock high-definition photoshoot quality."}
+            </p>
+            <button 
+              onClick={handleConnectKey}
+              className={`w-full py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border-2
+                ${hasPersonalKey 
+                  ? 'bg-white border-zimbabalooba-orange text-zimbabalooba-orange hover:bg-amber-50' 
+                  : 'bg-zimbabalooba-teal border-zimbabalooba-teal text-white shadow-lg hover:bg-zimbabalooba-darkTeal'}
+              `}
+            >
+              {hasPersonalKey ? "Change Studio Key" : "Connect Studio Key"}
+            </button>
+            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="block text-center mt-3 text-[8px] text-gray-400 hover:text-zimbabalooba-orange transition-colors tracking-widest uppercase">
+              Billing & Key Info
+            </a>
+          </div>
+
+          <div className="bg-white p-6 rounded-3xl shadow-xl shadow-zimbabalooba-teal/5 border border-gray-50">
+            <h3 className="text-xs font-black text-zimbabalooba-teal uppercase tracking-widest mb-4">1. Studio Input</h3>
             <ImageUploader onImageSelected={setSelectedImage} selectedImage={selectedImage} />
           </div>
 
@@ -103,12 +186,12 @@ const App: React.FC = () => {
         </div>
 
         <div className="lg:col-span-8 flex flex-col space-y-6">
-          <div className="bg-white rounded-[2rem] border border-gray-100 shadow-2xl h-full min-h-[600px] flex flex-col overflow-hidden relative studio-grid">
+          <div className={`bg-white rounded-[2rem] border border-gray-100 shadow-2xl h-full min-h-[600px] flex flex-col overflow-hidden relative studio-grid transition-all duration-500 ${hasPersonalKey ? 'ring-2 ring-zimbabalooba-orange/20' : ''}`}>
             <div className="border-b border-gray-100 p-6 flex items-center justify-between bg-white/95 backdrop-blur-sm z-20">
               <div className="flex items-center space-x-3">
                 <div className={`w-3 h-3 rounded-full ${state.resultUrl ? 'bg-zimbabalooba-orange shadow-[0_0_10px_rgba(255,176,0,0.5)] animate-pulse' : 'bg-gray-200'}`}></div>
                 <h2 className="text-xs font-black text-zimbabalooba-teal uppercase tracking-[0.2em]">
-                  Darkroom Preview
+                  {hasPersonalKey ? 'High-Definition Preview' : 'Standard Preview'}
                 </h2>
               </div>
               {state.resultUrl && (
@@ -123,9 +206,12 @@ const App: React.FC = () => {
               {state.error && (
                 <div className="bg-white p-10 rounded-[2rem] shadow-2xl max-w-md text-center border-t-4 border-rose-400 z-30 animate-shake">
                   <div className="w-16 h-16 bg-rose-50 text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-6"><i className="fa-solid fa-triangle-exclamation text-2xl"></i></div>
-                  <h4 className="text-gray-800 font-bold mb-2">Development Notice</h4>
+                  <h4 className="text-gray-800 font-bold mb-2">Studio Notice</h4>
                   <p className="text-gray-500 text-[11px] mb-6 leading-relaxed">{state.error}</p>
-                  <button onClick={() => setState(p => ({...p, error: null}))} className="px-6 py-2 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-colors">Dismiss</button>
+                  <div className="flex flex-col gap-2">
+                    <button onClick={handleConnectKey} className="w-full py-3 bg-zimbabalooba-teal text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-md">Reconnect Key</button>
+                    <button onClick={() => setState(p => ({...p, error: null}))} className="px-6 py-2 text-gray-400 hover:text-gray-600 text-[10px] font-bold uppercase tracking-widest">Dismiss</button>
+                  </div>
                 </div>
               )}
 
@@ -133,29 +219,34 @@ const App: React.FC = () => {
                 <div className="text-center z-10 bg-white/60 backdrop-blur-lg p-12 rounded-[3rem] shadow-2xl border border-white/40">
                   <div className="mb-10 relative flex justify-center">
                     <div className="w-28 h-28 border-4 border-zimbabalooba-lightBg rounded-full"></div>
-                    <div className={`absolute top-0 w-28 h-28 border-4 border-zimbabalooba-teal border-t-transparent rounded-full animate-spin`}></div>
+                    <div className={`absolute top-0 w-28 h-28 border-4 ${hasPersonalKey ? 'border-zimbabalooba-orange' : 'border-zimbabalooba-teal'} border-t-transparent rounded-full animate-spin`}></div>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <i className="fa-solid fa-camera-retro text-zimbabalooba-teal text-3xl animate-pulse"></i>
+                      <i className={`fa-solid ${hasPersonalKey ? 'fa-wand-magic-sparkles' : 'fa-camera-retro'} text-zimbabalooba-teal text-3xl animate-pulse`}></i>
                     </div>
                   </div>
                   <h3 className="text-xl font-brand text-zimbabalooba-teal uppercase tracking-widest mb-2">
                     {state.isEditing ? 'Refining Shot...' : 'Developing Image...'}
                   </h3>
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-                    Gemini 2.5 Flash Processing
+                    {hasPersonalKey ? 'Engine: Gemini 3 Pro (1K HD)' : 'Engine: Gemini 2.5 Flash'}
                   </p>
                 </div>
               )}
 
               {state.resultUrl && !state.isGenerating && !state.isEditing && (
                 <div className="w-full h-full flex flex-col items-center">
-                  <div className="relative group max-h-[550px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] rounded-2xl overflow-hidden bg-white ring-8 ring-white">
+                  <div className={`relative group max-h-[550px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] rounded-2xl overflow-hidden bg-white ring-8 ${hasPersonalKey ? 'ring-amber-50' : 'ring-white'}`}>
                     <img 
                       src={state.resultUrl} 
                       alt="Result" 
                       onLoad={() => setIsImageLoading(false)} 
                       className={`max-w-full max-h-[550px] object-contain transition-all duration-700 ${isImageLoading ? 'blur-xl opacity-0' : 'blur-0 opacity-100'}`} 
                     />
+                    {hasPersonalKey && (
+                      <div className="absolute top-4 right-4 bg-zimbabalooba-orange text-white px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1">
+                        <i className="fa-solid fa-sparkles"></i> PRO HD
+                      </div>
+                    )}
                   </div>
                   
                   <div className="w-full max-w-xl mt-10">
@@ -174,7 +265,7 @@ const App: React.FC = () => {
                         disabled={!editPrompt.trim()}
                         className={`px-8 py-4 rounded-xl font-brand uppercase tracking-[0.2em] text-xs transition-all
                           ${editPrompt.trim() 
-                            ? 'bg-zimbabalooba-teal text-white shadow-lg hover:bg-zimbabalooba-darkTeal' 
+                            ? 'bg-zimbabalooba-teal text-white shadow-lg' 
                             : 'bg-gray-100 text-gray-300'}
                         `}
                       >
@@ -192,7 +283,9 @@ const App: React.FC = () => {
                   </div>
                   <h3 className="text-zimbabalooba-teal font-brand text-2xl uppercase tracking-wider mb-3">Studio Ready</h3>
                   <p className="text-gray-400 text-xs leading-relaxed font-medium px-6">
-                    Professional modeling active via Gemini 2.5 Flash. Upload a garment to begin the photoshoot.
+                    {hasPersonalKey 
+                      ? 'Pro Studio Active. Upload a garment to begin your high-resolution photoshoot.' 
+                      : 'Standard Studio Active. Connect a key for HD results or start with Flash mode.'}
                   </p>
                 </div>
               )}
