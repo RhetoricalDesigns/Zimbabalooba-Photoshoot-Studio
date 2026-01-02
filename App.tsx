@@ -35,7 +35,11 @@ const App: React.FC = () => {
       setIsImageLoading(true);
     } catch (err: any) {
       console.error("Generate Error:", err);
-      setState({ isGenerating: false, isEditing: false, error: err.message, resultUrl: null });
+      // Helpful error message for Vercel/External deployments
+      const errorMessage = err.message?.includes("API_KEY") 
+        ? "API Key missing. Please ensure the API_KEY environment variable is set in your Vercel/deployment dashboard."
+        : err.message;
+      setState({ isGenerating: false, isEditing: false, error: errorMessage, resultUrl: null });
     }
   };
 
@@ -69,7 +73,7 @@ const App: React.FC = () => {
           <div className="hidden md:flex items-center gap-3">
              <div className="px-4 py-2 rounded-full border border-gray-100 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
                 <i className="fa-solid fa-camera"></i>
-                Standard Photoshoot Active
+                Professional Photoshoot Active
              </div>
           </div>
         </div>
@@ -78,12 +82,18 @@ const App: React.FC = () => {
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-10">
         <div className="lg:col-span-4 space-y-6">
           <div className="bg-white p-6 rounded-3xl shadow-xl shadow-zimbabalooba-teal/5 border border-gray-50">
-            <h3 className="text-xs font-black text-zimbabalooba-teal uppercase tracking-widest mb-4">1. Studio Input</h3>
+            <h3 className="text-xs font-black text-zimbabalooba-teal uppercase tracking-widest mb-4 flex items-center">
+              <i className="fa-solid fa-shirt mr-2"></i>
+              1. Studio Input
+            </h3>
             <ImageUploader onImageSelected={setSelectedImage} selectedImage={selectedImage} />
           </div>
 
           <div className="bg-white p-6 rounded-3xl shadow-xl shadow-zimbabalooba-teal/5 border border-gray-50">
-            <h3 className="text-xs font-black text-zimbabalooba-teal uppercase tracking-widest mb-4">2. Shot Parameters</h3>
+            <h3 className="text-xs font-black text-zimbabalooba-teal uppercase tracking-widest mb-4 flex items-center">
+              <i className="fa-solid fa-sliders mr-2"></i>
+              2. Shot Parameters
+            </h3>
             <FittingControls config={fittingConfig} onChange={setFittingConfig} />
           </div>
 
@@ -93,7 +103,7 @@ const App: React.FC = () => {
             className={`w-full py-5 px-8 rounded-full font-brand text-xl uppercase tracking-widest shadow-lg transition-all transform active:scale-95 border-b-4 
               ${!selectedImage || state.isGenerating || state.isEditing
                 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                : 'bg-zimbabalooba-teal text-white border-zimbabalooba-darkTeal hover:bg-zimbabalooba-darkTeal'
+                : 'bg-zimbabalooba-teal text-white border-zimbabalooba-darkTeal hover:bg-zimbabalooba-darkTeal shadow-zimbabalooba-teal/20'
               }
             `}
           >
@@ -126,9 +136,9 @@ const App: React.FC = () => {
               {state.error && (
                 <div className="bg-white p-10 rounded-[2rem] shadow-2xl max-w-md text-center border-t-4 border-rose-400 z-30 animate-shake">
                   <div className="w-16 h-16 bg-rose-50 text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-6"><i className="fa-solid fa-triangle-exclamation text-2xl"></i></div>
-                  <h4 className="text-gray-800 font-bold mb-2">Development Notice</h4>
-                  <p className="text-gray-500 text-[11px] mb-6 leading-relaxed">{state.error}</p>
-                  <button onClick={() => setState(p => ({...p, error: null}))} className="px-6 py-2 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-colors">Dismiss</button>
+                  <h4 className="text-gray-800 font-bold mb-2 uppercase tracking-tighter">Studio Notice</h4>
+                  <p className="text-gray-500 text-[11px] mb-6 leading-relaxed px-4">{state.error}</p>
+                  <button onClick={() => setState(p => ({...p, error: null}))} className="px-10 py-3 bg-zimbabalooba-teal text-white rounded-full text-[10px] font-bold uppercase tracking-widest hover:bg-zimbabalooba-darkTeal transition-colors shadow-lg shadow-zimbabalooba-teal/20">Dismiss</button>
                 </div>
               )}
 
@@ -195,7 +205,7 @@ const App: React.FC = () => {
                   </div>
                   <h3 className="text-zimbabalooba-teal font-brand text-2xl uppercase tracking-wider mb-3">Studio Ready</h3>
                   <p className="text-gray-400 text-xs leading-relaxed font-medium px-6">
-                    Professional modeling active via Gemini 2.5 Flash. Upload a garment to begin your photoshoot.
+                    Professional modeling active via Gemini 2.5 Flash. Upload your hand-dyed cotton pants to begin the photoshoot.
                   </p>
                 </div>
               )}
@@ -207,4 +217,11 @@ const App: React.FC = () => {
       <footer className="bg-white border-t border-gray-100 py-12 mt-auto">
         <div className="max-w-7xl mx-auto px-10 text-center">
           <h4 className="text-2xl font-brand font-black text-zimbabalooba-teal tracking-tighter uppercase mb-3">ZIMBABALOOBA</h4>
-          <p className="text-[9px] text-gray-400 font-black uppercase tracking
+          <p className="text-[9px] text-gray-400 font-black uppercase tracking-[0.5em] opacity-60">Hand-Dyed Cotton • Built for Adventure • Est. 2025</p>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default App;
